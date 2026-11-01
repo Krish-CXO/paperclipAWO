@@ -6,9 +6,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       build-essential pkg-config libssl-dev python3 ca-certificates curl gh lsof \
     && rm -rf /var/lib/apt/lists/* \
-    && corepack enable \
-    && corepack prepare pnpm@9.15.4 --activate \
-    && npm install --global --omit=dev @openai/codex@0.160.0 @anthropic-ai/claude-code@2.1.277
+    && npm install --global --force --omit=dev \
+      pnpm@9.15.4 @openai/codex@0.160.0 @anthropic-ai/claude-code@2.1.277 \
+    && test "$(pnpm --version)" = 9.15.4
 
 # Use the same verified rustup installer and package-owned compiler as upstream.
 # No debugging capabilities or relaxed seccomp profile are needed to build it.
