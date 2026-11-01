@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, wr
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ensureSecrets, runtimeEnvironment, settings } from "./awo-dev.mjs";
+import { ensurePrivatePort, ensureSecrets, runtimeEnvironment, settings } from "./awo-dev.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -60,4 +60,62 @@ test("Codespaces derives the exact forwarded origin and isolates the app from wo
 test("invalid or incomplete Codespaces routing fails before launch", () => {
   assert.throws(() => settings({ CODESPACES: "true" }), /Codespaces must provide/);
   assert.throws(() => settings({ AWO_PORT: "3100ignored" }), /AWO_PORT/);
+});
+
+function fakeGh(t, mode) {
+  const dir = mkdtempSync(path.join(tmpdir(), "awo-dev-gh-"));
+  const previous = { PATH: process.env.PATH, CODESPACE_NAME: process.env.CODESPACE_NAME };
+  t.after(() => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    rmSync(dir, { recursive: true, force: true });
+  });
+  writeFileSync(path.join(dir, "gh"), `#!${process.execPath}
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+const dir = ${JSON.stringify(dir)};
+const mode = ${JSON.stringify(mode)};
+const args = process.argv.slice(2);
+appendFileSync(dir + "/calls", JSON.stringify(args) + "\\n");
+if (args[2] === "forward") {
+  writeFileSync(dir + "/forward-pid", String(process.pid));
+  process.on("SIGTERM", () => { writeFileSync(dir + "/closed", "yes"); process.exit(0); });
+  setInterval(() => {}, 1000);
+} else if (args[2] === "visibility") {
+  if (mode === "forbidden") { console.error("HTTP 403: sensitive-detail-must-not-leak"); process.exit(1); }
+  if (!existsSync(dir + "/forward-pid")) { console.error("HTTP 404: tunnel port not found"); process.exit(1); }
+} else {
+  console.log(JSON.stringify([{ sourcePort: 3100, visibility: mode === "public" ? "public" : "private" }]));
+}
+`, { mode: 0o700 });
+  process.env.PATH = `${dir}${path.delimiter}${previous.PATH}`;
+  process.env.CODESPACE_NAME = "test-space-abc";
+  return dir;
+}
+
+test("fresh Codespaces create a private tunnel before launch and clean up only their forwarding client", async (t) => {
+  const dir = fakeGh(t, "private");
+  await ensurePrivatePort({ codespaces: true, port: 3100 });
+  const calls = readFileSync(path.join(dir, "calls"), "utf8").trim().split("\n").map(JSON.parse);
+  assert.ok(calls.some((args) => args[2] === "forward" && args[3] === "3100:0"));
+  assert.ok(calls.some((args) => args.includes("sourcePort,visibility")));
+  assert.equal(readFileSync(path.join(dir, "closed"), "utf8"), "yes");
+});
+
+test("Codespaces launch remains blocked when private visibility cannot be verified", async (t) => {
+  const dir = fakeGh(t, "public");
+  await assert.rejects(ensurePrivatePort({ codespaces: true, port: 3100 }), /Could not verify private forwarding/);
+  assert.equal(readFileSync(path.join(dir, "closed"), "utf8"), "yes");
+});
+
+test("Codespaces authorization failures cannot trigger port creation or expose CLI response details", async (t) => {
+  const dir = fakeGh(t, "forbidden");
+  await assert.rejects(ensurePrivatePort({ codespaces: true, port: 3100 }), (error) => {
+    assert.match(error.message, /launch was blocked/);
+    assert.doesNotMatch(error.message, /sensitive-detail/);
+    return true;
+  });
+  const calls = readFileSync(path.join(dir, "calls"), "utf8").trim().split("\n").map(JSON.parse);
+  assert.equal(calls.length, 1);
 });

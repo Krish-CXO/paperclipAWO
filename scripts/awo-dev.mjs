@@ -141,9 +141,57 @@ async function requireFreePort(port) {
   });
 }
 
-function ensurePrivatePort(config) {
-  if (config.codespaces) {
-    command("gh", ["codespace", "ports", "visibility", `${config.port}:private`, "-c", process.env.CODESPACE_NAME]);
+export async function ensurePrivatePort(config) {
+  if (!config.codespaces) return;
+  const selector = ["-c", process.env.CODESPACE_NAME];
+  const gh = (args) => spawnSync("gh", ["codespace", "ports", ...args, ...selector], {
+    cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30_000,
+  });
+  const visibilityArgs = ["visibility", `${config.port}:private`];
+  const isPrivate = () => {
+    const result = gh(["--json", "sourcePort,visibility"]);
+    if (result.status !== 0) return false;
+    try {
+      return JSON.parse(result.stdout).some((port) => port.sourcePort === config.port && port.visibility === "private");
+    } catch { return false; }
+  };
+  const failure = () => new Error(`Could not verify private forwarding for port ${config.port}. Paperclip launch was blocked. Check gh codespace ports -c ${process.env.CODESPACE_NAME}.`);
+  let result = gh(visibilityArgs);
+  if (result.status === 0) {
+    if (!isPrivate()) throw failure();
+    return;
+  }
+  if (result.error || !/\b404\b/.test(result.stderr || "")) throw failure();
+
+  // Visibility can only be set on an existing tunnel port. On a fresh Codespace,
+  // create it before starting the app, independently of editor auto-forwarding.
+  // gh creates a private remote tunnel and binds an ephemeral local loopback port.
+  const forward = spawn("gh", ["codespace", "ports", "forward", `${config.port}:0`, ...selector], {
+    cwd: repoRoot, stdio: "ignore",
+  });
+  let forwardError = null;
+  forward.once("error", (error) => { forwardError = error; });
+  try {
+    const deadline = Date.now() + 60_000;
+    while (Date.now() < deadline) {
+      await delay(1000);
+      result = gh(visibilityArgs);
+      if (result.status === 0) {
+        if (!isPrivate()) throw failure();
+        return;
+      }
+      if (forwardError || forward.exitCode !== null || forward.signalCode !== null || result.error || !/\b404\b/.test(result.stderr || "")) throw failure();
+    }
+    throw failure();
+  } finally {
+    // Closing this temporary client leaves the remote forwarded port in place.
+    // Only terminate the child created here, never another port-forwarding client.
+    if (forward.exitCode === null && forward.signalCode === null) {
+      const closed = new Promise((resolve) => forward.once("close", resolve));
+      forward.kill("SIGTERM");
+      await Promise.race([closed, delay(2000, undefined, { ref: false })]);
+      if (forward.exitCode === null && forward.signalCode === null) forward.kill("SIGKILL");
+    }
   }
 }
 
@@ -183,7 +231,7 @@ async function main() {
   }
   if (!existsSync(path.join(repoRoot, "ui/dist/index.html"))) throw new Error("Run node scripts/awo-dev.mjs setup first.");
   const env = runtimeEnvironment(config, ensureSecrets(config.stateDir));
-  ensurePrivatePort(config);
+  await ensurePrivatePort(config);
   const current = await health(config);
   if (current) {
     if (current.deploymentMode !== "authenticated" || !registeredHere(config)) throw new Error(`Port ${config.port} is used by another instance. Stop it or set AWO_PORT.`);

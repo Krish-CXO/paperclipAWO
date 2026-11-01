@@ -23,6 +23,8 @@ All three AWO launch paths require Paperclip sign-in. Local listeners bind to lo
 
 The devcontainer installs the required tools. Its creation hook installs locked dependencies and builds the UI; its start hook starts Paperclip. Startup explicitly sets port 3100 to private and stops with an error if GitHub cannot apply that setting.
 
+For a Codespace created before this configuration was added, back up its data, update the checkout, and rebuild the development container to apply the required tools and startup hooks.
+
 Data lives in `/workspaces/.paperclip-awo`, outside the Git checkout. It survives a container rebuild while the Codespace exists. Deleting the Codespace removes this data. Back it up before deletion.
 
 Codespaces can stop when idle and is not an always-on server. Compute and storage count against your GitHub allowance or billing. Stop the Codespace when finished; stopping only Paperclip does not stop the Codespace.
