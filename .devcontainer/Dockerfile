@@ -4,7 +4,7 @@ FROM mcr.microsoft.com/devcontainers/javascript-node:24-trixie
 USER root
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      build-essential pkg-config libssl-dev python3 ca-certificates curl gh lsof \
+      build-essential pkg-config libssl-dev python3 ca-certificates curl gh git-lfs lsof \
     && rm -rf /var/lib/apt/lists/* \
     && npm install --global --force --omit=dev \
       pnpm@9.15.4 @openai/codex@0.160.0 @anthropic-ai/claude-code@2.1.277 \
