@@ -103,3 +103,11 @@ test-results/
 
 # Content-addressed CI task results
 .turbo/
+
+# Private Paperclip AWO configuration and local recovery copies
+docker/.env.awo
+.paperclip-awo/
+awo-backups/
+.env.*
+!.env.example
+!.env.*.example

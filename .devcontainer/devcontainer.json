@@ -1,0 +1,39 @@
+{
+  "name": "Paperclip AWO",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "node",
+  "init": true,
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+  "forwardPorts": [3100],
+  "portsAttributes": {
+    "3100": {
+      "label": "Paperclip AWO",
+      "onAutoForward": "notify",
+      "protocol": "http",
+      "requireLocalPort": true
+    }
+  },
+  "otherPortsAttributes": {
+    "onAutoForward": "ignore"
+  },
+  "postCreateCommand": ["node", "scripts/awo-dev.mjs", "setup"],
+  "postStartCommand": ["node", "scripts/awo-dev.mjs", "start"],
+  "waitFor": "postCreateCommand",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "files.watcherExclude": {
+          "**/node_modules/**": true,
+          "**/target/**": true
+        }
+      }
+    }
+  }
+}
