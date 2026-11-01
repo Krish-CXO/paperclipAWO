@@ -91,6 +91,10 @@ export function runtimeEnvironment(config, secrets, env = process.env) {
     PAPERCLIP_PUBLIC_URL: config.publicUrl,
     PAPERCLIP_AUTH_PUBLIC_BASE_URL: config.publicUrl,
     PAPERCLIP_ALLOWED_HOSTNAMES: new URL(config.publicUrl).hostname,
+    // Codespaces rewrites same-origin POST Origin headers to this local origin.
+    ...(config.codespaces ? {
+      BETTER_AUTH_TRUSTED_ORIGINS: `${config.publicUrl},http://localhost:${config.port}`,
+    } : {}),
     HOST: "127.0.0.1",
     PORT: String(config.port),
     PAPERCLIP_AUTH_RATE_LIMIT_ENABLED: "true",
