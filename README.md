@@ -1,3 +1,20 @@
+## Run this fork: Paperclip AWO
+
+This fork adds a configured GitHub Codespace and repeatable local launch commands.
+See the [AWO setup guide](doc/AWO-SETUP.md) for prerequisites, sign-in, provider connections, and backups.
+
+[Open in GitHub Codespaces](https://codespaces.new/Krish-CXO/paperclipAWO?ref=master)
+
+For a local Docker installation, run this from the repository folder after installing Node.js 24.11+ and Docker:
+
+```sh
+node scripts/awo-docker.mjs start
+```
+
+The launcher creates private configuration, builds the app, and waits for a healthy database.
+Open `http://localhost:3100`, create your Paperclip account, and select **Claim this instance**.
+AI accounts are connected separately in **Apps → Connections**.
+
 <p align="center">
   <img src="doc/assets/banner.jpg" alt="Paperclip is the app people use to manage AI agents for work." width="720" />
 </p>

@@ -1,0 +1,63 @@
+# Start through `node scripts/awo-docker.mjs start` from the repository root.
+# The launcher supplies the saved env file and the current Git commit.
+name: paperclip-awo
+
+services:
+  paperclip:
+    image: paperclip-awo:local
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      # The upstream Dockerfile ends in a cloud-only stage. Select self-hosting.
+      target: production
+      args:
+        PAPERCLIP_BUILD_COMMIT: "${PAPERCLIP_BUILD_COMMIT:?Use scripts/awo-docker.mjs start}"
+    restart: unless-stopped
+    pids_limit: 2048
+    stop_grace_period: 90s
+    ports:
+      - "127.0.0.1:${PAPERCLIP_PORT:-3100}:3100"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3100"
+      PAPERCLIP_HOME: /paperclip
+      PAPERCLIP_DEPLOYMENT_MODE: authenticated
+      PAPERCLIP_DEPLOYMENT_EXPOSURE: private
+      PAPERCLIP_PUBLIC_URL: "${PAPERCLIP_PUBLIC_URL:-http://localhost:3100}"
+      PAPERCLIP_ALLOWED_HOSTNAMES: "${PAPERCLIP_ALLOWED_HOSTNAMES:-}"
+      PAPERCLIP_SECRETS_STRICT_MODE: "true"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?Run scripts/awo-docker.mjs setup}"
+      PAPERCLIP_TOOL_ACTION_SIGNING_SECRET: "${PAPERCLIP_TOOL_ACTION_SIGNING_SECRET:?Run scripts/awo-docker.mjs setup}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      PAPERCLIP_DB_BACKUP_ENABLED: "true"
+      PAPERCLIP_DB_BACKUP_INTERVAL_MINUTES: "60"
+      PAPERCLIP_DB_BACKUP_RETENTION_DAYS: "30"
+    volumes:
+      - paperclip-data:/paperclip
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - --input-type=module
+        - -e
+        - >-
+          try {
+            const r = await fetch('http://127.0.0.1:3100/api/health', {signal: AbortSignal.timeout(5000)});
+            const h = await r.json();
+            process.exit(r.ok && h.status === 'ok' && h.deploymentMode === 'authenticated' ? 0 : 1);
+          } catch { process.exit(1); }
+      interval: 15s
+      timeout: 10s
+      start_period: 120s
+      retries: 20
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  paperclip-data:
+    # Stable across checkout renames; the stop command never removes this volume.
+    name: paperclip-awo-data
